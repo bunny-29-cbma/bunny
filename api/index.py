@@ -380,7 +380,13 @@ def normalize_record(rec):
         cond_val = att_val
 
     if (code or name) and (cond_val > 0 or att_val > 0):
-        if str(code).lower() in ["subject code", "sub code", "code"] or str(name).lower() in ["subject name", "name"]:
+        c_low = str(code).lower().strip()
+        n_low = str(name).lower().strip()
+        if c_low in ["total", "overall", "average", "grand total", "summary", "subject code", "sub code", "code"]:
+            return None
+        if n_low in ["total", "overall", "average", "grand total", "summary", "subject name", "name"]:
+            return None
+        if any(k in n_low for k in ['fee', 'fine', 'challan', 'receipt', 'due amount', 'installment']):
             return None
 
         clean_code = str(code).strip() or "SUB"
@@ -450,7 +456,7 @@ class IMSScraper:
             "Accept": "application/json, text/javascript, text/html, */*; q=0.01",
             "Accept-Language": "en-US,en;q=0.9",
             "X-Requested-With": "XMLHttpRequest",
-            "Referer": f"{self.base_url}/studentIndex.html"
+            "Referer": f"{self.base_url}/"
         })
 
     def scrape_attendance(self, username, password):
@@ -491,13 +497,18 @@ class IMSScraper:
         login_data = parse_relaxed_json(resp_text)
         if login_data and isinstance(login_data, dict):
             status = str(login_data.get("status", "")).lower()
-            if status == "fail":
-                return None, 401, "Oops! Wrong credentials, try again 🙈"
+            if status in ("fail", "error"):
+                error_msg = login_data.get("message") or "Oops! Wrong credentials, try again 🙈"
+                return None, 401, error_msg
+            if status == "message":
+                error_msg = login_data.get("message") or "Notice from portal: please check portal."
+                return None, 401, error_msg
 
         # Step 2: Establish session redirect
         try:
             redirect_url = f"{self.base_url}/studentLogin/studentReDirect.action?personType=student"
             self.session.get(redirect_url, timeout=2.0, allow_redirects=True)
+            self.session.headers["Referer"] = f"{self.base_url}/studentIndex.html"
         except Exception:
             pass
 
