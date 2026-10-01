@@ -153,13 +153,14 @@ def get_demo_student_data(roll="24691A0551"):
 
     name = "CHOWDEGARI BANNI" if clean_roll == "24691A0551" else f"STUDENT {clean_roll}"
 
+    city_val = "ANANTAPUR" if clean_roll == "24691A0551" else ""
     return {
         "student": {
             "name": name,
             "roll": clean_roll,
             "year": year,
             "branch": branch,
-            "city": "ANANTAPUR",
+            "city": city_val,
             "institute": "Madanapalle Institute of Technology & Science"
         },
         "subjects": [
@@ -673,12 +674,13 @@ class IMSScraper:
             else:
                 resolved_name = f"Student {clean_user}"
 
+        city_val = "ANANTAPUR" if clean_user == "24691A0551" else ""
         student_info = {
             "name": resolved_name,
             "roll": clean_user,
             "year": "",
             "branch": "",
-            "city": "ANANTAPUR",
+            "city": city_val,
             "institute": institute_name
         }
 

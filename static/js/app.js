@@ -881,7 +881,22 @@
 
       if (nameEl) nameEl.textContent = s.name.toUpperCase();
       if (yearBranchEl) yearBranchEl.remove();
-      if (cityEl) cityEl.textContent = s.city;
+
+      // Display city only if present (Chowdegari Banni); remove for other students
+      const cityWrapper = document.getElementById('banner-city-wrapper');
+      if (s.city && s.city.trim()) {
+        if (cityEl) cityEl.textContent = s.city;
+        if (cityWrapper) cityWrapper.classList.remove('hidden');
+      } else {
+        if (cityWrapper) {
+          cityWrapper.classList.add('hidden');
+        } else if (cityEl) {
+          cityEl.textContent = '';
+          const nextDot = cityEl.nextElementSibling;
+          if (nextDot && nextDot.textContent.trim() === '•') nextDot.remove();
+        }
+      }
+
       if (rollEl) rollEl.textContent = s.roll;
       if (lastLoginEl) lastLoginEl.textContent = AppState.lastLoginTime;
 
