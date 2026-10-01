@@ -872,8 +872,8 @@ def attendance():
         }), 429
 
     payload = request.get_json(silent=True) or {}
-    username = str(payload.get("username", "")).strip()
-    password = str(payload.get("password", "")).strip()
+    username = str(payload.get("username") or payload.get("reg_no") or payload.get("roll") or "").strip()
+    password = str(payload.get("password") or payload.get("dob") or "").strip()
     is_explicit_demo = payload.get("demo", False)
 
     if not username:
