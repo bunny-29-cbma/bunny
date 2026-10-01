@@ -440,11 +440,15 @@
       doc.setFillColor(109, 40, 217);
       doc.rect(0, 0, 210, 3, 'F');
 
-      // Header Text: CHOWDEGARI BANNI | III YEAR CSE A | ANANTAPUR
+      // Header Text
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
       doc.setTextColor(255, 255, 255);
-      doc.text(`${student.name.toUpperCase()}  |  ${student.year} ${student.branch}  |  ${student.city}`, 14, 18);
+      const pdfHeader = [student.name.toUpperCase()];
+      const yearBranch = [student.year, student.branch].filter(Boolean).join(' ');
+      if (yearBranch) pdfHeader.push(yearBranch);
+      if (student.city) pdfHeader.push(student.city);
+      doc.text(pdfHeader.join('  |  '), 14, 18);
 
       // Sub-details
       doc.setFont('helvetica', 'normal');
@@ -568,7 +572,11 @@
 
       let text = `==================================================\n`;
       text += `ATTENDIX ATTENDANCE SUMMARY\n`;
-      text += `${student.name.toUpperCase()} | ${student.year} ${student.branch} | ${student.city}\n`;
+      const sumHeader = [student.name.toUpperCase()];
+      const yearBranchSum = [student.year, student.branch].filter(Boolean).join(' ');
+      if (yearBranchSum) sumHeader.push(yearBranchSum);
+      if (student.city) sumHeader.push(student.city);
+      text += `${sumHeader.join(' | ')}\n`;
       text += `Roll Number: ${student.roll}\n`;
       text += `Overall Attendance: ${overallPct}% (${totalAttended}/${totalConducted} classes)\n`;
       text += `Status: ${overallPct >= 85 ? 'Safe Zone (≥85%)' : (overallPct >= 75 ? 'Warning (75-84.9%)' : 'Danger Zone (<75%)')}\n`;
@@ -872,7 +880,7 @@
       const demoPill = document.getElementById('banner-demo-pill');
 
       if (nameEl) nameEl.textContent = s.name.toUpperCase();
-      if (yearBranchEl) yearBranchEl.textContent = `${s.year} ${s.branch}`;
+      if (yearBranchEl) yearBranchEl.remove();
       if (cityEl) cityEl.textContent = s.city;
       if (rollEl) rollEl.textContent = s.roll;
       if (lastLoginEl) lastLoginEl.textContent = AppState.lastLoginTime;

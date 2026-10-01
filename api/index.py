@@ -676,8 +676,8 @@ class IMSScraper:
         student_info = {
             "name": resolved_name,
             "roll": clean_user,
-            "year": resolved_year,
-            "branch": branch,
+            "year": "",
+            "branch": "",
             "city": "ANANTAPUR",
             "institute": institute_name
         }
