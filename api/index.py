@@ -894,10 +894,17 @@ def attendance():
     try:
         data, status_code, error_msg = scraper.scrape_attendance(username, password)
         if error_msg:
+            print(f"[ATTENDIX LOGIN FAILED] Roll: {username} | IP: {client_ip} | Reason: {error_msg}")
             return jsonify({"error": error_msg}), status_code
+
+        st_name = (data.get("student") or {}).get("name", "Unknown")
+        scraped_flag = data.get("scraped", False)
+        sub_count = len(data.get("subjects", []))
+        print(f"[ATTENDIX LOGIN SUCCESS] Roll: {username} | Name: {st_name} | IP: {client_ip} | Live: {scraped_flag} | Subjects: {sub_count}")
         return jsonify(data), 200
 
-    except Exception:
+    except Exception as e:
+        print(f"[ATTENDIX ERROR] Roll: {username} | IP: {client_ip} | Error: {str(e)}")
         fallback_data = get_demo_student_data(roll=username)
         fallback_data["demo"] = False
         return jsonify(fallback_data), 200
