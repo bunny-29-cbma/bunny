@@ -446,8 +446,89 @@ def extract_subjects_from_raw_gems(text):
 
     return list(temp_map.values())
 
+def extract_from_dashboard_activity(text):
+    """
+    Extracts real-time attendance directly from MITS IMS Semester Activity & Subject Details fieldsets.
+    MITS IMS active student dashboard renders real attendance in ExtJS fieldsets inside 'semesterActivity'.
+    """
+    if not text or not isinstance(text, str):
+        return []
+
+    subjects = []
+    sub_names = {}
+
+    pos_sub = text.find("id:'SubDetails'")
+    if pos_sub == -1: pos_sub = text.find('id:"SubDetails"')
+    
+    pos_sa = text.find("id:'semesterActivity'")
+    if pos_sa == -1: pos_sa = text.find('id:"semesterActivity"')
+
+    # 1. Map Subject Code -> Full Subject Name from SubDetails
+    if pos_sub != -1:
+        end_idx = pos_sa if (pos_sa != -1 and pos_sub < pos_sa) else (pos_sub + 100000)
+        sub_block = text[pos_sub:end_idx]
+        for fs_m in re.finditer(r'items\s*:\s*\[(.*?)\]\s*\}', sub_block, re.DOTALL):
+            fs_str = fs_m.group(1)
+            vals = []
+            for m in re.finditer(r"value\s*:\s*(?:'([^']*)'|\"([^\"]*)\")", fs_str):
+                v = m.group(1) if m.group(1) is not None else m.group(2)
+                clean = re.sub(r'<[^>]+>', '', v).strip()
+                vals.append(clean)
+            if len(vals) >= 3 and vals[0].isdigit():
+                c = vals[1].strip()
+                n = vals[2].strip()
+                if c and n:
+                    sub_names[c] = n
+
+    # 2. Extract Attendance Records from semesterActivity
+    if pos_sa != -1:
+        items_pos = text.find("items :[", pos_sa)
+        if items_pos == -1:
+            items_pos = text.find("items:[", pos_sa)
+
+        if items_pos != -1:
+            start = items_pos + (len("items :[") if "items :[" in text[items_pos:items_pos+10] else len("items:["))
+            depth = 1
+            i = start
+            n_len = len(text)
+            while i < n_len and depth > 0:
+                ch = text[i]
+                if ch == '[':
+                    depth += 1
+                elif ch == ']':
+                    depth -= 1
+                i += 1
+
+            sa_items_str = text[start:i-1]
+            for fs_m in re.finditer(r'items\s*:\s*\[(.*?)\]\s*\}', sa_items_str, re.DOTALL):
+                fs_str = fs_m.group(1)
+                vals = []
+                for m in re.finditer(r"value\s*:\s*(?:'([^']*)'|\"([^\"]*)\")", fs_str):
+                    v = m.group(1) if m.group(1) is not None else m.group(2)
+                    clean = re.sub(r'<[^>]+>', '', v).strip()
+                    vals.append(clean)
+                # Displayfield row format: [S.NO, CODE, ATTENDED, CONDUCTED, %]
+                if len(vals) >= 4 and vals[0].isdigit():
+                    code = vals[1].strip()
+                    try:
+                        att = int(float(vals[2].strip()))
+                        cond = int(float(vals[3].strip()))
+                    except Exception:
+                        continue
+
+                    if cond > 0 or att > 0:
+                        name = sub_names.get(code, code)
+                        subjects.append({
+                            "code": code,
+                            "name": name,
+                            "attended": att,
+                            "conducted": max(cond, att)
+                        })
+
+    return subjects
+
 class IMSScraper:
-    def __init__(self, base_url=IMS_BASE_URL, timeout=3.5):
+    def __init__(self, base_url=IMS_BASE_URL, timeout=4.0):
         self.base_url = base_url
         self.timeout = timeout
         self.session = requests.Session()
@@ -477,7 +558,7 @@ class IMSScraper:
             login_resp = self.session.post(
                 login_url,
                 data=login_payload,
-                timeout=3.5,
+                timeout=(4.0, 8.0),
                 allow_redirects=True
             )
         except Exception:
@@ -507,7 +588,7 @@ class IMSScraper:
         # Step 2: Establish session redirect
         try:
             redirect_url = f"{self.base_url}/studentLogin/studentReDirect.action?personType=student"
-            self.session.get(redirect_url, timeout=2.0, allow_redirects=True)
+            self.session.get(redirect_url, timeout=(4.0, 6.0), allow_redirects=True)
             self.session.headers["Referer"] = f"{self.base_url}/studentIndex.html"
         except Exception:
             pass
@@ -518,7 +599,7 @@ class IMSScraper:
 
         try:
             sidebar_url = f"{self.base_url}/gemsonline-student/getLeftSideBar.action?"
-            sidebar_resp = self.session.get(sidebar_url, timeout=2.0)
+            sidebar_resp = self.session.get(sidebar_url, timeout=(4.0, 6.0))
             if sidebar_resp.ok:
                 name_m = re.search(r'studName\s*:\s*[\'"]([^\'"]+)[\'"]', sidebar_resp.text)
                 if name_m:
@@ -540,7 +621,7 @@ class IMSScraper:
         home_view = ""
         try:
             home_url = f"{self.base_url}/gemsonline-student/getHomeView.action?"
-            home_resp = self.session.get(home_url, timeout=1.5)
+            home_resp = self.session.get(home_url, timeout=(3.0, 5.0))
             if home_resp.ok:
                 home_view = home_resp.text.strip().strip('"\'')
         except Exception:
@@ -562,13 +643,17 @@ class IMSScraper:
 
         # Step 5: Fetch live attendance records
         subjects = []
+        real_sem_title = ""
         for ep in endpoints:
             try:
-                ep_resp = self.session.get(ep, timeout=3.5)
+                ep_resp = self.session.get(ep, timeout=(5.0, 10.0))
                 if ep_resp.ok and "logout.action" not in ep_resp.text and "studentLogin.action" not in ep_resp.text:
                     parsed_subjects = self.parse_attendance_response(ep_resp.text)
                     if parsed_subjects:
                         subjects = parsed_subjects
+                        sem_m = re.search(r"title\s*:\s*['\"]Semester Activity for-([^'\"]+)['\"]", ep_resp.text)
+                        if sem_m:
+                            real_sem_title = sem_m.group(1).split('-')[0].strip()
                         break
             except Exception:
                 pass
@@ -579,7 +664,8 @@ class IMSScraper:
             fallback_data = get_demo_student_data(roll=clean_user)
             subjects = fallback_data["subjects"]
 
-        year, branch = infer_academic_details(clean_user)
+        inferred_year, branch = infer_academic_details(clean_user)
+        resolved_year = real_sem_title if real_sem_title else inferred_year
         resolved_name = student_name.strip() if student_name else ""
         if not resolved_name or resolved_name == "&nbsp;" or resolved_name == "&nbsp":
             if clean_user == "24691A0551":
@@ -590,7 +676,7 @@ class IMSScraper:
         student_info = {
             "name": resolved_name,
             "roll": clean_user,
-            "year": year,
+            "year": resolved_year,
             "branch": branch,
             "city": "ANANTAPUR",
             "institute": institute_name
@@ -605,25 +691,30 @@ class IMSScraper:
 
     def parse_attendance_response(self, text):
         """
-        Parses live attendance response across ExtJS bracket matching,
-        relaxed JSON structures, or HTML tables.
+        Parses live attendance response across ExtJS semesterActivity fieldsets,
+        ExtJS bracket matching, relaxed JSON structures, or HTML tables.
         """
         if not text or not isinstance(text, str):
             return []
 
-        # 1. ExtJS bracket matching (primary Advaya GEMS records extractor)
+        # 1. ExtJS Semester Activity & Subject Details fieldsets (Primary MITS IMS active dashboard format)
+        subjects = extract_from_dashboard_activity(text)
+        if subjects:
+            return subjects
+
+        # 2. ExtJS bracket matching (Advaya GEMS store records: [...] extractor)
         subjects = extract_subjects_from_raw_gems(text)
         if subjects:
             return subjects
 
-        # 2. Relaxed JSON recursive parsing
+        # 3. Relaxed JSON recursive parsing
         parsed = parse_relaxed_json(text)
         if parsed:
             subjects = self.extract_subjects_robust(parsed)
             if subjects:
                 return subjects
 
-        # 3. HTML table fallback
+        # 4. HTML table fallback
         if "<table" in text.lower():
             soup = BeautifulSoup(text, "html.parser")
             subjects = self.extract_subjects_from_html(soup)
