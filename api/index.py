@@ -454,6 +454,13 @@ def index():
     """Serves the Attendix single-page app."""
     return render_template("index.html")
 
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """Serves static assets (CSS, JS, images, icons)."""
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    static_dir = os.path.join(root_dir, "static")
+    return send_from_directory(static_dir, filename)
+
 @app.route("/manifest.json")
 def manifest():
     """Serves the PWA manifest."""
